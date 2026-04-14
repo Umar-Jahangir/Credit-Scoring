@@ -27,6 +27,44 @@ function isUnbankedLoan(loan: any): boolean {
   return loan?.applicantType === "unbanked" || loan?.features?.underwritingPath === "unbanked";
 }
 
+function deriveLoanStatusFromPayload(loan: any): string {
+  const explicit = String(loan?.effectiveStatus || loan?.status || "").toLowerCase();
+  const finalStatuses = new Set([
+    "auto_approved",
+    "approved",
+    "accepted",
+    "declined",
+    "disbursed",
+    "closed",
+    "auto_rejected",
+    "rejected",
+  ]);
+  const inReviewStatuses = new Set([
+    "pending",
+    "under_review",
+    "review",
+    "hold",
+    "processing",
+  ]);
+
+  if (finalStatuses.has(explicit)) {
+    return explicit;
+  }
+
+  const decision = String(
+    loan?.features?.decision || loan?.decisionSummary?.decision || ""
+  ).toLowerCase();
+  const preScreenStatus = String(
+    loan?.features?.preScreenStatus || loan?.decisionSummary?.preScreenStatus || ""
+  ).toLowerCase();
+  const alternateDecision = String(loan?.alternateUnderwriting?.decision || "").toLowerCase();
+
+  if (decision === "reject" || preScreenStatus === "reject" || alternateDecision === "reject") return "auto_rejected";
+  if (decision === "approve" || alternateDecision === "approve") return "auto_approved";
+  if (inReviewStatuses.has(explicit)) return "under_review";
+  return "under_review";
+}
+
 export function AdminLoanApplications() {
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -165,14 +203,7 @@ export function AdminLoanApplications() {
             category: loanType,
             loanAmount: loan.requestedAmount,
             tenure: loan.requestedTenure,
-            status: (() => {
-              const sl = String(loan.status || '').toLowerCase();
-              const score = Number(loan.aiAnalysis?.creditScore || userDetails.creditScore || 600);
-              if (score < 440 || sl === 'auto_rejected') return 'auto_rejected';
-              if (['approved', 'auto_approved', 'accepted', 'disbursed', 'closed'].includes(sl)) return 'approved';
-              if (['rejected', 'declined'].includes(sl)) return 'rejected';
-              return 'under_review';
-            })(),
+            status: deriveLoanStatusFromPayload(loan),
             riskLevel: displayAltRisk,
             riskScore: loan.aiAnalysis?.creditScore || 600,
             defaultProb: displayAltPd,
@@ -382,14 +413,7 @@ export function AdminLoanApplications() {
         category: loanType,
         loanAmount: freshLoan.requestedAmount,
         tenure: freshLoan.requestedTenure,
-        status: (() => {
-          const sl = String(freshLoan.status || '').toLowerCase();
-          const score = Number(freshLoan.aiAnalysis?.creditScore || userDetails.creditScore || 600);
-          if (score < 440 || sl === 'auto_rejected') return 'auto_rejected';
-          if (['approved', 'auto_approved', 'accepted', 'disbursed', 'closed'].includes(sl)) return 'approved';
-          if (['rejected', 'declined'].includes(sl)) return 'rejected';
-          return 'under_review';
-        })(),
+        status: deriveLoanStatusFromPayload(freshLoan),
         riskLevel: displayAltRiskFresh,
         riskScore: freshLoan.aiAnalysis?.creditScore || 600,
         defaultProb: displayAltPdFresh,
@@ -772,18 +796,8 @@ export function AdminLoanApplications() {
                           : "₹0"}
                       </td>
                       <td className="py-5 px-6 text-sm whitespace-nowrap">
-                        <span className={`inline-flex items-center px-4 py-1.5 rounded-sm border text-xs font-black uppercase tracking-[0.1em] ${loanApp.status === 'approved'
-                          ? 'bg-green-50 border-green-300 text-green-700'
-                          : loanApp.status === 'under_review'
-                            ? 'bg-yellow-50 border-yellow-300 text-yellow-700'
-                            : loanApp.status === 'rejected'
-                              ? 'bg-red-50 border-red-300 text-red-600'
-                              : 'bg-gray-50 border-gray-300 text-gray-600'
-                          }`}>
-                          {loanApp.status === 'under_review' ? 'PENDING' :
-                            loanApp.status === 'approved' ? 'APPROVED' :
-                              loanApp.status === 'rejected' ? 'REJECTED' :
-                                loanApp.status.toUpperCase()}
+                        <span className={`inline-flex items-center px-4 py-1.5 rounded-sm border text-xs font-black uppercase tracking-[0.1em] ${getStatusBadgeClass(loanApp.status)}`}>
+                          {getDisplayStatus(loanApp.status).toUpperCase()}
                         </span>
                       </td>
                     </tr>
@@ -1087,7 +1101,7 @@ export function AdminLoanApplications() {
 
 
               {/* Action Buttons */}
-              {loan.status === 'under_review' && (
+              {['under_review', 'pending'].includes(String(loan.status || '').toLowerCase()) && (
                 <div className="flex gap-4 pt-6 mt-auto">
                   <Button onClick={handleApprove} className="flex-1 bg-green-400 hover:bg-green-500 text-black border-[1.5px] border-black rounded-none shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:translate-y-0.5 hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] transition-all font-black uppercase tracking-[0.15em] py-6 text-sm">
                     Approve Application

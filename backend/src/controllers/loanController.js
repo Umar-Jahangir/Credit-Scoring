@@ -35,14 +35,66 @@ const LOAN_TYPE_PREFIX = {
   credit_card: "C",
 };
 
+const FINAL_STATUS_ALLOWLIST = new Set([
+  "auto_approved",
+  "approved",
+  "accepted",
+  "declined",
+  "disbursed",
+  "closed",
+  "auto_rejected",
+  "rejected",
+]);
+
+const IN_REVIEW_STATUS_ALLOWLIST = new Set([
+  "pending",
+  "under_review",
+  "review",
+  "hold",
+  "processing",
+]);
+
 async function generateLoanCode(loanType) {
   const prefix = LOAN_TYPE_PREFIX[loanType] || "X";
   const countForType = await LoanApplication.countDocuments({ loanType });
   return `${prefix}${countForType + 1}`;
 }
 
-function getLoanDisplayStatus(status) {
-  const normalized = String(status || "").toLowerCase();
+function getEffectiveLoanStatus(loan) {
+  const normalizedStatus = String(loan?.status || "").toLowerCase();
+  if (FINAL_STATUS_ALLOWLIST.has(normalizedStatus)) {
+    return normalizedStatus;
+  }
+
+  const decision = String(loan?.features?.decision || "").toLowerCase();
+  const preScreenStatus = String(loan?.features?.preScreenStatus || "").toLowerCase();
+  const alternateDecision = String(
+    loan?.alternateUnderwriting?.decision || ""
+  ).toLowerCase();
+
+  const inferredReject =
+    decision === "reject" ||
+    preScreenStatus === "reject" ||
+    alternateDecision === "reject";
+  const inferredApprove =
+    decision === "approve" || alternateDecision === "approve";
+
+  if (inferredReject) {
+    return "auto_rejected";
+  }
+  if (inferredApprove) {
+    return "auto_approved";
+  }
+
+  if (IN_REVIEW_STATUS_ALLOWLIST.has(normalizedStatus)) {
+    return "under_review";
+  }
+
+  return "under_review";
+}
+
+function getLoanDisplayStatus(loan) {
+  const normalized = getEffectiveLoanStatus(loan);
   return STATUS_DISPLAY_MAP[normalized] || "Under Review";
 }
 
@@ -1090,7 +1142,8 @@ export const getMyLoans = async (req, res) => {
 
     const normalizedLoans = loans.map((loanDoc) => {
       const loan = loanDoc.toObject({ virtuals: true });
-      loan.displayStatus = getLoanDisplayStatus(loan.status);
+      loan.effectiveStatus = getEffectiveLoanStatus(loan);
+      loan.displayStatus = getLoanDisplayStatus(loan);
       return loan;
     });
 
@@ -1135,7 +1188,8 @@ export const getMyLoanById = async (req, res) => {
     }
 
     const loan = loanDoc.toObject({ virtuals: true });
-    loan.displayStatus = getLoanDisplayStatus(loan.status);
+    loan.effectiveStatus = getEffectiveLoanStatus(loan);
+    loan.displayStatus = getLoanDisplayStatus(loan);
 
     console.log(` Loan found`);
     console.log(`   Status: ${loan.status}`);
