@@ -2755,19 +2755,6 @@ export function ApplyLoanPage() {
                           </div>
                         </div>
                       )}
-
-                      {applicantType === 'unbanked' && (
-                        <div className="space-y-2 pt-4 border-t border-slate-200">
-                          <label className="flex items-center gap-2 text-xs font-bold">
-                            <input
-                              type="checkbox"
-                              checked={alternateDataConsent}
-                              onChange={(e) => setAlternateDataConsent(e.target.checked)}
-                            />
-                            I consent to alternate data usage for underwriting
-                          </label>
-                        </div>
-                      )}
                     </div>
                   </CardContent>
                 </Card>
