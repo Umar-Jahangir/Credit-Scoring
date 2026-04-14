@@ -2891,48 +2891,6 @@ export function ApplyLoanPage() {
                     </div>
 
                     {/* Unbanked alternate data fields — required for submission */}
-                    {applicantType === 'unbanked' && (
-                      <div className="space-y-4 pt-6 border-t border-slate-200">
-                        <h3 className="text-sm font-black text-blue-600 uppercase tracking-widest">4. Alternate Underwriting Details</h3>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-slate-800 font-black">
-                            Reference ID (PAN / masked bank reference) <span className="text-red-500">*</span>
-                          </Label>
-                          <Input
-                            placeholder="e.g. AAAAA1111A"
-                            value={alternateReferenceId}
-                            onChange={(e) => setAlternateReferenceId(e.target.value.toUpperCase())}
-                            className="bg-white border-slate-300 font-mono text-sm uppercase"
-                          />
-                          <div className="space-y-1.5 pt-1">
-                            <Label className="text-xs text-slate-600">Reference type</Label>
-                            <select
-                              value={alternateReferenceIdType}
-                              onChange={(e) => setAlternateReferenceIdType(e.target.value as "pan" | "bank_account_masked" | "other")}
-                              className="border border-black px-3 py-2 text-xs font-bold bg-white w-full max-w-xs"
-                            >
-                              <option value="pan">PAN</option>
-                              <option value="bank_account_masked">Masked bank / account ref</option>
-                              <option value="other">Other</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-slate-800 font-black">
-                            Declared Monthly Income (Family / Guardian) <span className="text-red-500">*</span>
-                          </Label>
-                          <Input
-                            type="number"
-                            min={0}
-                            placeholder="Monthly income in ₹"
-                            value={declaredMonthlyIncome}
-                            onChange={(e) => setDeclaredMonthlyIncome(e.target.value)}
-                            className="bg-white border-slate-300 text-slate-900"
-                          />
-                        </div>
-                      </div>
-                    )}
-
                   </CardContent>
                 </Card>
 
