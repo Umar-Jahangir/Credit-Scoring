@@ -145,7 +145,7 @@ export function AuditLog() {
                     No audit activity found for this admin scope yet.
                   </div>
                 )}
-                {!loading && auditLogs.map((log) => (
+                {!loading && !error && auditLogs.map((log) => (
                   <div key={log.id} className="hover:bg-blue-50/50 transition-colors duration-200">
                     <div className="px-8 py-6">
                       <div className="flex items-start gap-6">
