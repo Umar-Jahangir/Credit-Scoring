@@ -825,7 +825,7 @@ export const getAuditLogs = async (req, res) => {
         }
 
         return {
-          _id: `${loan._id}-${normalizedStatus}-${loan.updatedAt}`,
+          _id: `${loan._id}-${normalizedStatus}-${loan.updatedAt instanceof Date ? loan.updatedAt.toISOString() : String(loan.updatedAt)}`,
           applicantName: loan.userId?.fullName,
           eventType,
           description,
