@@ -36,6 +36,8 @@ function deriveLoanStatusFromPayload(loan: any): string {
     "declined",
     "disbursed",
     "closed",
+    "ongoing",
+    "completed",
     "auto_rejected",
     "rejected",
   ]);
