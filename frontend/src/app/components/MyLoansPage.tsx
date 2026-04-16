@@ -55,6 +55,44 @@ function alternateRiskLevelFromScore(score: number): string {
 const formatCurrency = (value: any) =>
   safeNumber(value, 0).toLocaleString("en-IN");
 
+function deriveLoanStatusFromPayload(loan: any): string {
+  const explicit = String(loan?.effectiveStatus || loan?.status || "").toLowerCase();
+  const finalStatuses = new Set([
+    "auto_approved",
+    "approved",
+    "accepted",
+    "declined",
+    "disbursed",
+    "closed",
+    "auto_rejected",
+    "rejected",
+  ]);
+  const inReviewStatuses = new Set([
+    "pending",
+    "under_review",
+    "review",
+    "hold",
+    "processing",
+  ]);
+
+  if (finalStatuses.has(explicit)) {
+    return explicit;
+  }
+
+  const decision = String(
+    loan?.features?.decision || loan?.decisionSummary?.decision || ""
+  ).toLowerCase();
+  const preScreenStatus = String(
+    loan?.features?.preScreenStatus || loan?.decisionSummary?.preScreenStatus || ""
+  ).toLowerCase();
+  const alternateDecision = String(loan?.alternateUnderwriting?.decision || "").toLowerCase();
+
+  if (decision === "reject" || preScreenStatus === "reject" || alternateDecision === "reject") return "auto_rejected";
+  if (decision === "approve" || alternateDecision === "approve") return "auto_approved";
+  if (inReviewStatuses.has(explicit)) return "under_review";
+  return explicit || "under_review";
+}
+
 export function MyLoansPage() {
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -103,8 +141,8 @@ export function MyLoansPage() {
         
         const formattedLoans = loansArray.map((loan: any) => {
           console.log(`Processing loan: ${loan._id} - Status: ${loan.status}`);
-          const backendStatus = loan.status;
-          const displayStatus = loan.displayStatus || formatStatus(backendStatus);
+          const backendStatusStr = deriveLoanStatusFromPayload(loan);
+          const displayStatus = formatStatus(backendStatusStr);
           const requestedAmount = safeNumber(loan.requestedAmount, 0);
           const tenureMonths = Math.max(1, safeNumber(loan.requestedTenure, 12));
           const rate = safeNumber(loan.aiAnalysis?.suggestedInterestRate, 12.5);
@@ -141,7 +179,7 @@ export function MyLoansPage() {
             tenure: tenureMonths,
             category: normalizeLoanType(loan.loanType),
             submittedAt: loan.submittedAt,
-            backendStatus,
+            backendStatus: backendStatusStr,
             displayStatus,
             rejectionReason:
               loan.adminDecision?.rejectionReason ||
@@ -276,8 +314,8 @@ export function MyLoansPage() {
     // Then fetch fresh details by ID in background
     const freshLoan = await fetchLoanById(loan.id);
     if (freshLoan) {
-      const backendStatus = freshLoan.status;
-      const displayStatus = freshLoan.displayStatus || formatStatus(backendStatus);
+      const backendStatusStr = deriveLoanStatusFromPayload(freshLoan);
+      const displayStatus = freshLoan.displayStatus || formatStatus(backendStatusStr);
       const isUnbankedFresh =
         freshLoan.applicantType === "unbanked" ||
         freshLoan.features?.underwritingPath === "unbanked";
@@ -311,7 +349,7 @@ export function MyLoansPage() {
         tenure: Math.max(1, safeNumber(freshLoan.requestedTenure, 12)),
         category: normalizeLoanType(freshLoan.loanType),
         submittedAt: freshLoan.submittedAt,
-        backendStatus,
+        backendStatus: backendStatusStr,
         displayStatus,
         rejectionReason:
           freshLoan.adminDecision?.rejectionReason ||

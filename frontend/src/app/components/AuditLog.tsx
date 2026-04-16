@@ -12,6 +12,7 @@ export function AuditLog() {
   const { logout } = useAuth();
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAuditLogs();
@@ -30,7 +31,7 @@ export function AuditLog() {
       if (response.ok) {
         const data = await response.json();
         const logs = (data.logs || []).map((log: any) => ({
-          id: log._id,
+          id: log.id || log._id,
           applicantName: log.applicantName || 'Unknown',
           eventType: log.eventType,
           description: log.description,
@@ -39,9 +40,14 @@ export function AuditLog() {
           icon: log.severity === 'success' ? CheckCircle : log.severity === 'error' ? XCircle : AlertCircle
         }));
         setAuditLogs(logs);
+        setError(null);
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setError(errData.message || `Failed to fetch logs (${response.status})`);
       }
     } catch (error) {
       console.error('Error fetching audit logs:', error);
+      setError(error instanceof Error ? error.message : 'Connection error');
     } finally {
       setLoading(false);
     }
@@ -124,7 +130,22 @@ export function AuditLog() {
           <div className="bg-white border border-slate-200 rounded-sm overflow-hidden shadow-sm">
             <div className="overflow-y-auto max-h-[calc(100vh-280px)]">
               <div className="space-y-0 divide-y divide-slate-200">
-                {auditLogs.map((log) => (
+                {loading && (
+                  <div className="px-8 py-10 text-center text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+                    Loading audit activity...
+                  </div>
+                )}
+                {!loading && error && (
+                  <div className="px-8 py-10 text-center text-xs font-black uppercase tracking-[0.2em] text-red-500">
+                    Error: {error}
+                  </div>
+                )}
+                {!loading && !error && auditLogs.length === 0 && (
+                  <div className="px-8 py-10 text-center text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+                    No audit activity found for this admin scope yet.
+                  </div>
+                )}
+                {!loading && !error && auditLogs.map((log) => (
                   <div key={log.id} className="hover:bg-blue-50/50 transition-colors duration-200">
                     <div className="px-8 py-6">
                       <div className="flex items-start gap-6">
@@ -147,7 +168,7 @@ export function AuditLog() {
                             </div>
                           </div>
                           <p className="text-[11px] text-black font-black uppercase tracking-[0.15em] mt-2">
-                            {log.description.replace(/\s*by\s+.*?Admin$/i, '')}
+                            {log.description}
                           </p>
                         </div>
                       </div>
