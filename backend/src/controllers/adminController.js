@@ -97,70 +97,15 @@ const mapStatusToDecision = (status) => {
   return "Hold";
 };
 
-const FINAL_STATUS_ALLOWLIST = new Set([
-  "auto_approved",
-  "approved",
-  "accepted",
-  "declined",
-  "disbursed",
-  "closed",
-  "auto_rejected",
-  "rejected",
-]);
-
-const IN_REVIEW_STATUS_ALLOWLIST = new Set([
-  "pending",
-  "under_review",
-  "review",
-  "hold",
-  "processing",
-]);
-
-const deriveEffectiveStatus = (loan = {}) => {
-  const rawStatus = String(loan?.status || "").toLowerCase();
-
-  if (FINAL_STATUS_ALLOWLIST.has(rawStatus)) {
-    return rawStatus;
-  }
-
-  const decision = String(loan?.features?.decision || "").toLowerCase();
-  const preScreenStatus = String(loan?.features?.preScreenStatus || "").toLowerCase();
-  const alternateDecision = String(
-    loan?.alternateUnderwriting?.decision || ""
-  ).toLowerCase();
-
-  const inferredReject =
-    decision === "reject" ||
-    preScreenStatus === "reject" ||
-    alternateDecision === "reject";
-  const inferredApprove =
-    decision === "approve" || alternateDecision === "approve";
-
-  if (inferredReject) {
-    return "auto_rejected";
-  }
-  if (inferredApprove) {
-    return "auto_approved";
-  }
-
-  if (IN_REVIEW_STATUS_ALLOWLIST.has(rawStatus)) {
-    return "under_review";
-  }
-
-  return "under_review";
-};
-
 const attachDecisionSummary = (loanDoc) => {
   const loan = loanDoc?.toObject ? loanDoc.toObject() : loanDoc;
   const features = loan?.features || {};
   const aiAnalysis = loan?.aiAnalysis || {};
-  const effectiveStatus = deriveEffectiveStatus(loan);
 
   return {
     ...loan,
-    effectiveStatus,
     decisionSummary: {
-      decision: features.decision || mapStatusToDecision(effectiveStatus),
+      decision: features.decision || mapStatusToDecision(loan.status),
       decisionReason: features.decisionReason || null,
       preScreenStatus: features.preScreenStatus || null,
       manualReviewRequired: Boolean(features.manualReviewRequired),
@@ -768,73 +713,33 @@ export const getAuditLogs = async (req, res) => {
       query.loanType = admin.adminLoanType;
     }
 
-    // Build activity feed from all loans in admin scope so automatic and user actions are visible too.
-    const activityHistory = await LoanApplication.find(query)
+    // Get loan decisions made by this admin
+    const decisionHistory = await LoanApplication.find({
+      ...query,
+      "adminDecision.adminId": req.user._id,
+    })
       .populate("userId", "fullName")
-      .populate("adminDecision.adminId", "fullName")
-      .sort({ updatedAt: -1, submittedAt: -1 })
-      .limit(100);
+      .sort({ "adminDecision.decidedAt": -1 })
+      .limit(50);
 
-    const logs = activityHistory
-      .map((loan) => {
-        const normalizedStatus = deriveEffectiveStatus(loan);
-        const adminActorName =
-          loan.adminDecision?.adminId?.fullName || admin.fullName || "Admin";
-
-        let eventType = "Processed";
-        let severity = "warning";
-        let description = "Application updated";
-
-        if (normalizedStatus === "approved") {
-          eventType = "Approved";
-          severity = "success";
-          description = `Application approved by ${adminActorName}`;
-        } else if (normalizedStatus === "rejected") {
-          eventType = "Rejected";
-          severity = "error";
-          description = `Application rejected by ${adminActorName}`;
-        } else if (normalizedStatus === "auto_approved") {
-          eventType = "Auto Approved";
-          severity = "success";
-          description = "Application auto approved by policy engine";
-        } else if (normalizedStatus === "auto_rejected") {
-          eventType = "Auto Rejected";
-          severity = "error";
-          description = "Application auto rejected by policy engine";
-        } else if (normalizedStatus === "accepted") {
-          eventType = "Offer Accepted";
-          severity = "success";
-          description = "Loan offer accepted by applicant";
-        } else if (normalizedStatus === "declined") {
-          eventType = "Offer Declined";
-          severity = "warning";
-          description = "Loan offer declined by applicant";
-        } else if (normalizedStatus === "disbursed") {
-          eventType = "Disbursed";
-          severity = "success";
-          description = "Loan disbursed";
-        } else if (["under_review", "pending", "hold"].includes(normalizedStatus)) {
-          eventType = "Under Review";
-          severity = "warning";
-          description = "Application queued for manual underwriting review";
-        } else {
-          // Default for newly created loans
-          eventType = "Submitted";
-          severity = "info";
-          description = "New application submitted for processing";
-        }
-
-        return {
-          _id: `${loan._id}-${normalizedStatus}-${loan.updatedAt instanceof Date ? loan.updatedAt.toISOString() : String(loan.updatedAt)}`,
-          applicantName: loan.userId?.fullName,
-          eventType,
-          description,
-          timestamp:
-            loan.adminDecision?.decidedAt || loan.updatedAt || loan.submittedAt,
-          severity,
-        };
-      })
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    const logs = decisionHistory.map((loan) => ({
+      _id: loan._id,
+      applicantName: loan.userId?.fullName || "Unknown",
+      eventType:
+        loan.status === "approved"
+          ? "Approved"
+          : loan.status === "rejected"
+            ? "Rejected"
+            : "Processed",
+      description: `Application ${loan.status === "approved" ? "approved" : loan.status === "rejected" ? "rejected" : "processed"} by ${admin.fullName} `,
+      timestamp: loan.adminDecision?.decidedAt || loan.submittedAt,
+      severity:
+        loan.status === "approved"
+          ? "success"
+          : loan.status === "rejected"
+            ? "error"
+            : "warning",
+    }));
 
     console.log(` Found ${logs.length} audit log entries`);
 

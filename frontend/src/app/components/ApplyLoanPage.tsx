@@ -2890,7 +2890,6 @@ export function ApplyLoanPage() {
                       </div>
                     </div>
 
-                    {/* Unbanked alternate data fields — required for submission */}
                   </CardContent>
                 </Card>
 
